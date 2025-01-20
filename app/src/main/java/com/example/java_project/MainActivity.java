@@ -9,16 +9,23 @@ import android.provider.MediaStore;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.objects.DetectedObject;
+import com.google.mlkit.vision.objects.ObjectDetection;
+import com.google.mlkit.vision.objects.ObjectDetector;
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions;
 import com.google.mlkit.vision.text.Text;
-import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -26,7 +33,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ImageView imageView;
     private TextView textViewResults;
-    private Button buttonSelectImage, buttonRecognizeText;
+    private Button buttonSelectImage, buttonRecognizeText, buttonDetectObjects;
     private Bitmap selectedImage;
 
     @Override
@@ -38,10 +45,16 @@ public class MainActivity extends AppCompatActivity {
         textViewResults = findViewById(R.id.textViewResults);
         buttonSelectImage = findViewById(R.id.buttonSelectImage);
         buttonRecognizeText = findViewById(R.id.buttonRecognizeText);
+        buttonDetectObjects = findViewById(R.id.buttonDetectObjects);
 
+        // Обработчик кнопки выбора изображения
         buttonSelectImage.setOnClickListener(v -> selectImage());
 
+        // Обработчик кнопки распознавания текста
         buttonRecognizeText.setOnClickListener(v -> recognizeText());
+
+        // Обработчик кнопки распознавания объектов
+        buttonDetectObjects.setOnClickListener(v -> detectObjects());
     }
 
     private void selectImage() {
@@ -60,8 +73,9 @@ public class MainActivity extends AppCompatActivity {
                 selectedImage = BitmapFactory.decodeStream(imageStream);
                 imageView.setImageBitmap(selectedImage);
 
-                // Включаем кнопку распознавания текста после того как изображение выбрано
+                // Включаем кнопки после выбора изображения
                 buttonRecognizeText.setEnabled(true);
+                buttonDetectObjects.setEnabled(true);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
@@ -75,7 +89,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         InputImage image = InputImage.fromBitmap(selectedImage, 0);
-
         TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
 
         recognizer.process(image)
@@ -83,6 +96,27 @@ public class MainActivity extends AppCompatActivity {
                 .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания: " + e.getMessage()));
     }
 
+    private void detectObjects() {
+        if (selectedImage == null) {
+            textViewResults.setText("Пожалуйста, выберите изображение.");
+            return;
+        }
+
+        // Настройки детектора объектов
+        ObjectDetectorOptions options = new ObjectDetectorOptions.Builder()
+                .setDetectorMode(ObjectDetectorOptions.SINGLE_IMAGE_MODE)
+                .enableMultipleObjects()
+                .enableClassification() // Включает классификацию объектов (если доступно)
+                .build();
+
+        ObjectDetector detector = ObjectDetection.getClient(options);
+
+        InputImage image = InputImage.fromBitmap(selectedImage, 0);
+
+        detector.process(image)
+                .addOnSuccessListener(this::displayDetectedObjects)
+                .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания объектов: " + e.getMessage()));
+    }
 
     private void displayRecognizedText(Text result) {
         StringBuilder recognizedText = new StringBuilder();
@@ -95,6 +129,26 @@ public class MainActivity extends AppCompatActivity {
             textViewResults.setText(recognizedText.toString());
         } else {
             textViewResults.setText("Текст не распознан.");
+        }
+    }
+
+    private void displayDetectedObjects(List<DetectedObject> objects) {
+        StringBuilder detectedObjects = new StringBuilder();
+
+        for (DetectedObject object : objects) {
+            detectedObjects.append("Объект ID: ").append(object.getTrackingId()).append("\n");
+            for (DetectedObject.Label label : object.getLabels()) {
+                detectedObjects.append(" - ")
+                        .append(label.getText())
+                        .append(" (").append(label.getConfidence()).append(")\n");
+            }
+            detectedObjects.append("\n");
+        }
+
+        if (detectedObjects.length() > 0) {
+            textViewResults.setText(detectedObjects.toString());
+        } else {
+            textViewResults.setText("Объекты не распознаны.");
         }
     }
 }

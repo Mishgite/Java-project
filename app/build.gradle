@@ -31,10 +31,11 @@ android {
 dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'com.google.mlkit:text-recognition:16.0.0'
+    implementation 'com.google.mlkit:object-detection:16.0.0'
     implementation libs.vision.common
     implementation libs.object.detection.common
     implementation libs.object.detection
     implementation libs.annotation.jvm
     implementation libs.play.services.mlkit.text.recognition.common
-    implementation libs.play.services.mlkit.text.recognition// или последнюю версию
+    implementation libs.play.services.mlkit.text.recognition
 }
