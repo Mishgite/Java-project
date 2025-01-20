@@ -47,13 +47,10 @@ public class MainActivity extends AppCompatActivity {
         buttonRecognizeText = findViewById(R.id.buttonRecognizeText);
         buttonDetectObjects = findViewById(R.id.buttonDetectObjects);
 
-        // Обработчик кнопки выбора изображения
         buttonSelectImage.setOnClickListener(v -> selectImage());
 
-        // Обработчик кнопки распознавания текста
         buttonRecognizeText.setOnClickListener(v -> recognizeText());
 
-        // Обработчик кнопки распознавания объектов
         buttonDetectObjects.setOnClickListener(v -> detectObjects());
     }
 
@@ -73,7 +70,6 @@ public class MainActivity extends AppCompatActivity {
                 selectedImage = BitmapFactory.decodeStream(imageStream);
                 imageView.setImageBitmap(selectedImage);
 
-                // Включаем кнопки после выбора изображения
                 buttonRecognizeText.setEnabled(true);
                 buttonDetectObjects.setEnabled(true);
             } catch (FileNotFoundException e) {
@@ -102,11 +98,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Настройки детектора объектов
         ObjectDetectorOptions options = new ObjectDetectorOptions.Builder()
                 .setDetectorMode(ObjectDetectorOptions.SINGLE_IMAGE_MODE)
                 .enableMultipleObjects()
-                .enableClassification() // Включает классификацию объектов (если доступно)
+                .enableClassification()
                 .build();
 
         ObjectDetector detector = ObjectDetection.getClient(options);
