@@ -32,6 +32,15 @@
         android:layout_marginTop="20dp"
         android:enabled="false" />
 
+    <Button
+        android:id="@+id/buttonCopyResult"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Копировать результат"
+        android:layout_marginTop="20dp"
+        android:enabled="false" />
+
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content">

@@ -1,5 +1,8 @@
 package com.example.java_project;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -9,6 +12,7 @@ import android.provider.MediaStore;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -33,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ImageView imageView;
     private TextView textViewResults;
-    private Button buttonSelectImage, buttonRecognizeText, buttonDetectObjects;
+    private Button buttonSelectImage, buttonRecognizeText, buttonDetectObjects, buttonCopyResult;
     private Bitmap selectedImage;
 
     @Override
@@ -46,12 +50,14 @@ public class MainActivity extends AppCompatActivity {
         buttonSelectImage = findViewById(R.id.buttonSelectImage);
         buttonRecognizeText = findViewById(R.id.buttonRecognizeText);
         buttonDetectObjects = findViewById(R.id.buttonDetectObjects);
+        buttonCopyResult = findViewById(R.id.buttonCopyResult);
 
         buttonSelectImage.setOnClickListener(v -> selectImage());
 
         buttonRecognizeText.setOnClickListener(v -> recognizeText());
 
         buttonDetectObjects.setOnClickListener(v -> detectObjects());
+        buttonCopyResult.setOnClickListener(v -> copyResultToClipboard());
     }
 
     private void selectImage() {
@@ -88,7 +94,10 @@ public class MainActivity extends AppCompatActivity {
         TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
 
         recognizer.process(image)
-                .addOnSuccessListener(this::displayRecognizedText)
+                .addOnSuccessListener(result -> {
+                    displayRecognizedText(result);
+                    buttonCopyResult.setEnabled(true);
+                })
                 .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания: " + e.getMessage()));
     }
 
@@ -142,8 +151,23 @@ public class MainActivity extends AppCompatActivity {
 
         if (detectedObjects.length() > 0) {
             textViewResults.setText(detectedObjects.toString());
+            buttonCopyResult.setEnabled(true);
         } else {
             textViewResults.setText("Объекты не распознаны.");
+        }
+    }
+
+    private void copyResultToClipboard() {
+        String textToCopy = textViewResults.getText().toString();
+
+        if (!textToCopy.isEmpty()) {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("Распознанный текст", textToCopy);
+            clipboard.setPrimaryClip(clip);
+
+            Toast.makeText(this, "Текст скопирован в буфер обмена", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Нет текста для копирования", Toast.LENGTH_SHORT).show();
         }
     }
 }
