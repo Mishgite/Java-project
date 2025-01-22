@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -16,7 +17,14 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.content.ContextCompat;
 
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.objects.DetectedObject;
 import com.google.mlkit.vision.objects.ObjectDetection;
@@ -25,39 +33,88 @@ import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int SELECT_IMAGE_REQUEST = 1;
 
+    private PreviewView cameraPreview;
     private ImageView imageView;
-    private TextView textViewResults;
+    private TextView textViewLiveResults, textViewResults;
     private Button buttonSelectImage, buttonRecognizeText, buttonDetectObjects, buttonCopyResult;
+
     private Bitmap selectedImage;
+    private ExecutorService cameraExecutor;
+    private TextRecognizer textRecognizer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        cameraPreview = findViewById(R.id.cameraPreview);
         imageView = findViewById(R.id.imageView);
+        textViewLiveResults = findViewById(R.id.textViewLiveResults);
         textViewResults = findViewById(R.id.textViewResults);
         buttonSelectImage = findViewById(R.id.buttonSelectImage);
         buttonRecognizeText = findViewById(R.id.buttonRecognizeText);
         buttonDetectObjects = findViewById(R.id.buttonDetectObjects);
         buttonCopyResult = findViewById(R.id.buttonCopyResult);
 
+        cameraExecutor = Executors.newSingleThreadExecutor();
+        textRecognizer = TextRecognition.getClient();
+
+        startCamera();
+
         buttonSelectImage.setOnClickListener(v -> selectImage());
-
         buttonRecognizeText.setOnClickListener(v -> recognizeText());
-
         buttonDetectObjects.setOnClickListener(v -> detectObjects());
         buttonCopyResult.setOnClickListener(v -> copyResultToClipboard());
+    }
+
+    private void startCamera() {
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
+                ProcessCameraProvider.getInstance(this);
+
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+
+                Preview preview = new Preview.Builder().build();
+                preview.setSurfaceProvider(cameraPreview.getSurfaceProvider());
+
+                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
+
+                imageAnalysis.setAnalyzer(cameraExecutor, imageProxy -> {
+                    InputImage image = InputImage.fromMediaImage(
+                            imageProxy.getImage(),
+                            imageProxy.getImageInfo().getRotationDegrees()
+                    );
+
+                    textRecognizer.process(image)
+                            .addOnSuccessListener(text -> runOnUiThread(() -> textViewLiveResults.setText(text.getText())))
+                            .addOnFailureListener(e -> Log.e("MainActivity", "Ошибка анализа", e))
+                            .addOnCompleteListener(task -> imageProxy.close());
+                });
+
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        .build();
+
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+
+            } catch (Exception e) {
+                Toast.makeText(this, "Ошибка запуска камеры: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        }, ContextCompat.getMainExecutor(this));
     }
 
     private void selectImage() {
@@ -78,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
 
                 buttonRecognizeText.setEnabled(true);
                 buttonDetectObjects.setEnabled(true);
+                buttonCopyResult.setEnabled(false);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
@@ -91,14 +149,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         InputImage image = InputImage.fromBitmap(selectedImage, 0);
-        TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-
-        recognizer.process(image)
+        textRecognizer.process(image)
                 .addOnSuccessListener(result -> {
-                    displayRecognizedText(result);
+                    textViewResults.setText(result.getText());
                     buttonCopyResult.setEnabled(true);
                 })
-                .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания: " + e.getMessage()));
+                .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания текста."));
     }
 
     private void detectObjects() {
@@ -116,58 +172,35 @@ public class MainActivity extends AppCompatActivity {
         ObjectDetector detector = ObjectDetection.getClient(options);
 
         InputImage image = InputImage.fromBitmap(selectedImage, 0);
-
         detector.process(image)
-                .addOnSuccessListener(this::displayDetectedObjects)
-                .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания объектов: " + e.getMessage()));
-    }
-
-    private void displayRecognizedText(Text result) {
-        StringBuilder recognizedText = new StringBuilder();
-
-        for (Text.TextBlock block : result.getTextBlocks()) {
-            recognizedText.append(block.getText()).append("\n");
-        }
-
-        if (recognizedText.length() > 0) {
-            textViewResults.setText(recognizedText.toString());
-        } else {
-            textViewResults.setText("Текст не распознан.");
-        }
-    }
-
-    private void displayDetectedObjects(List<DetectedObject> objects) {
-        StringBuilder detectedObjects = new StringBuilder();
-
-        for (DetectedObject object : objects) {
-            detectedObjects.append("Объект ID: ").append(object.getTrackingId()).append("\n");
-            for (DetectedObject.Label label : object.getLabels()) {
-                detectedObjects.append(" - ")
-                        .append(label.getText())
-                        .append(" (").append(label.getConfidence()).append(")\n");
-            }
-            detectedObjects.append("\n");
-        }
-
-        if (detectedObjects.length() > 0) {
-            textViewResults.setText(detectedObjects.toString());
-            buttonCopyResult.setEnabled(true);
-        } else {
-            textViewResults.setText("Объекты не распознаны.");
-        }
+                .addOnSuccessListener(objects -> {
+                    StringBuilder results = new StringBuilder();
+                    for (DetectedObject object : objects) {
+                        for (DetectedObject.Label label : object.getLabels()) {
+                            results.append(label.getText()).append("\n");
+                        }
+                    }
+                    textViewResults.setText(results.toString());
+                    buttonCopyResult.setEnabled(true);
+                })
+                .addOnFailureListener(e -> textViewResults.setText("Ошибка распознавания объектов."));
     }
 
     private void copyResultToClipboard() {
-        String textToCopy = textViewResults.getText().toString();
-
-        if (!textToCopy.isEmpty()) {
+        String text = textViewResults.getText().toString();
+        if (!text.isEmpty()) {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("Распознанный текст", textToCopy);
-            clipboard.setPrimaryClip(clip);
-
-            Toast.makeText(this, "Текст скопирован в буфер обмена", Toast.LENGTH_SHORT).show();
+            clipboard.setPrimaryClip(ClipData.newPlainText("Результаты", text));
+            Toast.makeText(this, "Текст скопирован", Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, "Нет текста для копирования", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        cameraExecutor.shutdown();
+        textRecognizer.close();
     }
 }
