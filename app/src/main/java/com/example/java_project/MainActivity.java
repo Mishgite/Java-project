@@ -16,8 +16,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExperimentalGetImage;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
@@ -33,6 +35,7 @@ import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
@@ -68,7 +71,8 @@ public class MainActivity extends AppCompatActivity {
         buttonCopyResult = findViewById(R.id.buttonCopyResult);
 
         cameraExecutor = Executors.newSingleThreadExecutor();
-        textRecognizer = TextRecognition.getClient();
+
+        textRecognizer = TextRecognition.getClient(new TextRecognizerOptions.Builder().build());
 
         startCamera();
 
@@ -78,6 +82,8 @@ public class MainActivity extends AppCompatActivity {
         buttonCopyResult.setOnClickListener(v -> copyResultToClipboard());
     }
 
+
+    @OptIn(markerClass = ExperimentalGetImage.class)
     private void startCamera() {
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
                 ProcessCameraProvider.getInstance(this);
